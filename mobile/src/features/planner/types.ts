@@ -1,0 +1,75 @@
+import type { Muscle, Tier } from './muscles';
+
+export type PlanStyle = 'efficient' | 'full';
+export type ScheduleType = 'loose' | 'days' | 'exact';
+export type DayType = 'full_a' | 'full_b' | 'upper' | 'lower' | 'push' | 'pull' | 'legs' | 'recovery';
+export type SlotRole = 'main' | 'secondary' | 'accessory';
+
+export type PlanSettings = {
+  style: PlanStyle;
+  daysPerWeek: number;
+  scheduleType: ScheduleType;
+  /** Training weekdays, 0 = Monday … 6 = Sunday. Length equals daysPerWeek. */
+  weekdays: number[];
+  /** Weekday → "HH:MM" (exact schedule only). */
+  times: Record<number, string>;
+  deloadEnabled: boolean;
+  /** User-chosen tiers; always win over scan/questionnaire. */
+  tierOverrides: Partial<Record<Muscle, Tier>>;
+  /** User confirmed medical clearance (unlocks higher-risk lifts). */
+  clearanceConfirmed: boolean;
+};
+
+export type PlanExercise = {
+  id: string;
+  exerciseId: string;
+  role: SlotRole;
+  sets: number;
+  repMin: number;
+  repMax: number;
+  rir: string;
+  restSec: number;
+  /** Exercises sharing a group are done as a superset (alternate sets, rest after the pair). */
+  supersetGroup?: string;
+  notes: string[];
+};
+
+export type PlanDay = {
+  id: string;
+  type: DayType;
+  label: string;
+  exercises: PlanExercise[];
+  estMinutes: number;
+};
+
+export type MuscleVolume = {
+  tier: Tier;
+  reasons: string[];
+  /** Weekly fractional sets the plan aims for / never exceeds / never drops below. */
+  target: number;
+  ceiling: number;
+  floor: number;
+  /** Weekly fractional sets the plan currently delivers. */
+  sets: number;
+};
+
+export type Plan = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Profile version this plan was built from (to offer a rebuild when it changes). */
+  profileUpdatedAt: string;
+  scanTakenAt?: string;
+  settings: PlanSettings;
+  days: PlanDay[];
+  volume: Record<Muscle, MuscleVolume>;
+  sessionBudgetMin: number;
+  blockWeeks: number;
+  deloadWeek: number | null;
+  why: string[];
+  warnings: string[];
+  restDay: string;
+  cardio: string;
+  /** True once the user hand-edits exercises (rebuilding would discard edits). */
+  customized: boolean;
+};

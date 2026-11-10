@@ -1,0 +1,34 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "health-app-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y",
+        "-p",
+        "node@22",
+        "node",
+        "mobile/node_modules/expo/bin/cli",
+        "start",
+        "mobile",
+        "--web",
+        "--port",
+        "8081"
+      ],
+      "port": 8081
+    },
+    {
+      "name": "scan-server-mock",
+      "runtimeExecutable": "server/node_modules/.bin/tsx",
+      "runtimeArgs": [
+        "server/src/index.ts"
+      ],
+      "env": {
+        "SCAN_MOCK": "1",
+        "PORT": "8787"
+      },
+      "port": 8787
+    }
+  ]
+}
