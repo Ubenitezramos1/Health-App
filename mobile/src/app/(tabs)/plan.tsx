@@ -5,10 +5,13 @@ import { Screen } from '@/components/screen';
 import { AppText, Badge, Button, Callout, Card } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { MUSCLES, MUSCLE_LABELS, TIER_LABELS, type Tier } from '@/features/planner/muscles';
+import { changesSincePlan } from '@/features/planner/profile-diff';
 import { weekView } from '@/features/planner/schedule';
 import { usePlanStore } from '@/features/planner/store';
 import { useProfileStore } from '@/features/profile/store';
 import { latestUsableScan, useScanStore } from '@/features/scanner/store';
+import { fmtDate } from '@/features/tracker/format';
+import { useTrackerStore } from '@/features/tracker/store';
 
 const TIER_TONE: Record<Tier, 'progress' | 'accent' | 'muted'> = {
   priority: 'progress',
@@ -23,6 +26,9 @@ export default function PlanOverview() {
   const build = usePlanStore((s) => s.build);
   const profile = useProfileStore((s) => s.profile);
   const scans = useScanStore((s) => s.scans);
+  const profileHistory = useProfileStore((s) => s.history);
+  const pastPlans = usePlanStore((s) => s.history);
+  const logs = useTrackerStore((s) => s.logs);
   if (!plan || !profile)
     return (
       <Screen inTab>
@@ -43,7 +49,9 @@ export default function PlanOverview() {
 
   const lifting = plan.days.filter((d) => d.type !== 'recovery');
   const longest = Math.max(...lifting.map((d) => d.estMinutes));
-  const profileChanged = profile.updatedAt !== plan.profileUpdatedAt;
+  // Only answers that shape the plan count (weight or mood changes don't); unknown history → assume changed.
+  const sinceBuilt = changesSincePlan(plan, profile, profileHistory);
+  const profileChanged = sinceBuilt === null ? profile.updatedAt !== plan.profileUpdatedAt : sinceBuilt.length > 0;
   const latest = latestUsableScan(scans);
   const newScan = !!latest && latest.record.takenAt !== plan.scanTakenAt;
 
@@ -82,9 +90,9 @@ export default function PlanOverview() {
           <Callout tone="info">
             <AppText variant="label">Your profile changed</AppText>
             <AppText variant="small" tone="secondary">
-              Rebuild to use your latest answers{plan.customized ? ' (this replaces your exercise edits)' : ''}.
+              Some answers that shape your plan changed since it was built.
             </AppText>
-            <Button label="Rebuild plan" variant="secondary" onPress={() => build(profile, plan.settings)} />
+            <Button label="Review changes" variant="secondary" onPress={() => router.push('/plan/rebuild')} />
           </Callout>
         </View>
       ) : null}
@@ -177,12 +185,57 @@ export default function PlanOverview() {
         </AppText>
       </Card>
 
-      <Card style={{ gap: Spacing.sm }}>
+      <Card style={{ gap: Spacing.sm, marginBottom: Spacing.lg }}>
         <AppText variant="label">Cardio and rest days</AppText>
         <AppText variant="small" tone="secondary">
           {plan.cardio}
         </AppText>
       </Card>
+
+      {pastPlans.length ? (
+        <Card style={{ gap: Spacing.sm }}>
+          <AppText variant="label">Past plans</AppText>
+          <AppText variant="small" tone="secondary">
+            Every plan you replaced is kept. Open one to look at it or switch back.
+          </AppText>
+          {[...pastPlans].reverse().map((p) => (
+            <Pressable
+              key={p.id}
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: '/plan/past/[planId]', params: { planId: p.id } })}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: Spacing.md,
+                paddingVertical: Spacing.sm,
+                borderTopWidth: 1,
+                borderTopColor: Colors.border,
+                opacity: pressed ? 0.7 : 1,
+              })}>
+              <View style={{ flex: 1 }}>
+                <AppText variant="small">
+                  {p.settings.style === 'efficient' ? 'Efficient' : 'Full volume'} ·{' '}
+                  {p.days.filter((d) => d.type !== 'recovery').length} days/week
+                </AppText>
+                <AppText variant="small" tone="secondary" numberOfLines={1}>
+                  {(() => {
+                    const focus = MUSCLES.filter((m) => p.volume[m].tier === 'priority').map((m) => MUSCLE_LABELS[m]);
+                    const done = logs.filter((l) => l.planId === p.id && l.completedAt).length;
+                    return `${focus.length ? `Focus: ${focus.join(', ')}` : 'Balanced'} · ${done} workout${done === 1 ? '' : 's'} logged`;
+                  })()}
+                </AppText>
+                <AppText variant="small" tone="muted">
+                  Built {fmtDate(p.createdAt)}
+                  {p.archivedAt ? ` · replaced ${fmtDate(p.archivedAt)}` : ''}
+                </AppText>
+              </View>
+              <AppText variant="small" tone="accent">
+                View ›
+              </AppText>
+            </Pressable>
+          ))}
+        </Card>
+      ) : null}
     </Screen>
   );
 }

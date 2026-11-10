@@ -72,4 +72,6 @@ export type Plan = {
   cardio: string;
   /** True once the user hand-edits exercises (rebuilding would discard edits). */
   customized: boolean;
+  /** Set when the plan was replaced and moved to past plans. */
+  archivedAt?: string;
 };

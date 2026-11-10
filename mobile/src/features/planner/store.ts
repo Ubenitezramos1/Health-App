@@ -22,42 +22,61 @@ async function read<T>(key: string): Promise<T | null> {
 type PlanState = {
   hydrated: boolean;
   plan: Plan | null;
+  /** Every plan the user has replaced, oldest first. All are kept so any can be restored. */
+  history: Plan[];
   hydrate: () => Promise<void>;
   /**
-   * Build a fresh plan; the previous one is archived (the tracker keeps history against it).
+   * Build a fresh plan; the previous one moves to history (its workout logs stay attached to it).
    * `scan` defaults to the latest usable physique scan; pass null to ignore scans.
    */
   build: (profile: Profile, settings: PlanSettings, scan?: ScanResult | null) => Plan;
   /** Persist a hand-edited plan. */
   save: (plan: Plan) => void;
+  /** Make a past plan current again; the current one moves to history. */
+  restore: (planId: string) => void;
 };
 
-export const usePlanStore = create<PlanState>((set, get) => ({
-  hydrated: false,
-  plan: null,
+export const usePlanStore = create<PlanState>((set, get) => {
+  const persist = () => {
+    const { plan, history } = get();
+    void AsyncStorage.multiSet([
+      [KEYS.current, JSON.stringify(plan)],
+      [KEYS.history, JSON.stringify(history)],
+    ]);
+  };
+  const archive = (p: Plan | null) => (p ? [{ ...p, archivedAt: new Date().toISOString() }] : []);
 
-  hydrate: async () => {
-    set({ plan: await read<Plan>(KEYS.current), hydrated: true });
-  },
+  return {
+    hydrated: false,
+    plan: null,
+    history: [],
 
-  build: (profile, settings, scan) => {
-    const previous = get().plan;
-    // Default to the latest usable physique scan, so every rebuild reflects it.
-    const effectiveScan = scan === undefined ? (latestUsableScan(useScanStore.getState().scans)?.result ?? null) : scan;
-    const plan = generatePlan(profile, settings, effectiveScan);
-    set({ plan });
-    void (async () => {
-      if (previous) {
-        const history = (await read<Plan[]>(KEYS.history)) ?? [];
-        await AsyncStorage.setItem(KEYS.history, JSON.stringify([...history, previous]));
-      }
-      await AsyncStorage.setItem(KEYS.current, JSON.stringify(plan));
-    })();
-    return plan;
-  },
+    hydrate: async () => {
+      const [plan, history] = await Promise.all([read<Plan>(KEYS.current), read<Plan[]>(KEYS.history)]);
+      set({ plan, history: history ?? [], hydrated: true });
+    },
 
-  save: (plan) => {
-    set({ plan });
-    void AsyncStorage.setItem(KEYS.current, JSON.stringify(plan));
-  },
-}));
+    build: (profile, settings, scan) => {
+      // Default to the latest usable physique scan, so every rebuild reflects it.
+      const effectiveScan = scan === undefined ? (latestUsableScan(useScanStore.getState().scans)?.result ?? null) : scan;
+      const plan = generatePlan(profile, settings, effectiveScan);
+      set({ plan, history: [...get().history, ...archive(get().plan)] });
+      persist();
+      return plan;
+    },
+
+    save: (plan) => {
+      set({ plan });
+      persist();
+    },
+
+    restore: (planId) => {
+      const { plan, history } = get();
+      const target = history.find((p) => p.id === planId);
+      if (!target) return;
+      const { archivedAt: _archivedAt, ...restored } = target;
+      set({ plan: restored, history: [...history.filter((p) => p.id !== planId), ...archive(plan)] });
+      persist();
+    },
+  };
+});

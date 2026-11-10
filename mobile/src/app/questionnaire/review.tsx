@@ -5,6 +5,8 @@ import { View } from 'react-native';
 import { Screen } from '@/components/screen';
 import { AppText, Button, Callout, FieldError, ProgressBar } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { planChanges } from '@/features/planner/profile-diff';
+import { usePlanStore } from '@/features/planner/store';
 import { needsMedicalClearance } from '@/features/profile/schema';
 import { useProfileStore } from '@/features/profile/store';
 import { SummaryList } from '@/features/questionnaire/summary-list';
@@ -15,9 +17,14 @@ export default function Review() {
   const [error, setError] = useState<string>();
 
   const save = async () => {
+    const before = useProfileStore.getState().profile;
     const result = await complete();
     if (!result.ok) return setError(result.message);
-    router.dismissTo('/');
+    const after = useProfileStore.getState().profile;
+    // Only ask about the plan when an answer that shapes it actually changed.
+    const changes = before && after && usePlanStore.getState().plan ? planChanges(before, after) : [];
+    if (changes.length) router.replace('/plan/rebuild');
+    else router.dismissTo('/');
   };
 
   return (

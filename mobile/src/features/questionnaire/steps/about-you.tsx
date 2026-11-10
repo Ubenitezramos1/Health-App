@@ -5,6 +5,7 @@ import {
   AppText,
   ChipGroup,
   Callout,
+  DigitsField,
   FieldError,
   NumberField,
   OptionCards,
@@ -39,13 +40,15 @@ const LENGTH_UNITS = [
 /* ---------- Welcome: age gate, disclaimer, units ---------- */
 
 export function WelcomeStep({ draft, update, errors }: StepProps) {
-  const initial = draft.dob?.split('-').map(Number) ?? [];
-  const [year, setYear] = useState<number | undefined>(initial[0]);
-  const [month, setMonth] = useState<number | undefined>(initial[1]);
-  const [day, setDay] = useState<number | undefined>(initial[2]);
+  // Kept as typed text (not numbers) so "07" stays "07" instead of collapsing to "7".
+  const initial = draft.dob?.split('-') ?? [];
+  const [year, setYear] = useState(initial[0] ?? '');
+  const [month, setMonth] = useState(initial[1] ?? '');
+  const [day, setDay] = useState(initial[2] ?? '');
 
-  const setDob = (y?: number, m?: number, d?: number) => {
-    update({ dob: y && m && d && y > 999 ? toIsoDate(y, m, d) : '' });
+  const setDob = (y: string, m: string, d: string) => {
+    const [yn, mn, dn] = [Number(y), Number(m), Number(d)];
+    update({ dob: y.length === 4 && mn && dn ? toIsoDate(yn, mn, dn) : '' });
   };
 
   const age = draft.dob ? ageFromDob(draft.dob) : null;
@@ -56,27 +59,30 @@ export function WelcomeStep({ draft, update, errors }: StepProps) {
     <View>
       <Section title="Date of birth" hint="You need to be 18 or older to use this app.">
         <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-          <NumberField
+          <DigitsField
             label="Month"
             placeholder="MM"
+            maxLength={2}
             value={month}
             onChange={(v) => {
               setMonth(v);
               setDob(year, v, day);
             }}
           />
-          <NumberField
+          <DigitsField
             label="Day"
             placeholder="DD"
+            maxLength={2}
             value={day}
             onChange={(v) => {
               setDay(v);
               setDob(year, month, v);
             }}
           />
-          <NumberField
+          <DigitsField
             label="Year"
             placeholder="YYYY"
+            maxLength={4}
             value={year}
             onChange={(v) => {
               setYear(v);

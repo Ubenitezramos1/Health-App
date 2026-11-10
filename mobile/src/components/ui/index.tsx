@@ -269,6 +269,42 @@ export function TextField({ label, style, ...rest }: TextInputProps & { label?: 
   );
 }
 
+/** Digits-only text field that keeps exactly what was typed (leading zeros included), e.g. dates and codes. */
+export function DigitsField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+}: {
+  label?: string;
+  value: string;
+  onChange: (digits: string) => void;
+  placeholder?: string;
+  maxLength?: number;
+}) {
+  return (
+    <View style={{ gap: Spacing.xs, flex: 1, minWidth: 0 }}>
+      {label ? (
+        <AppText variant="small" tone="secondary">
+          {label}
+        </AppText>
+      ) : null}
+      <TextInput
+        accessibilityLabel={label}
+        keyboardType="number-pad"
+        inputMode="numeric"
+        placeholder={placeholder}
+        placeholderTextColor={Colors.textMuted}
+        maxLength={maxLength}
+        value={value}
+        onChangeText={(t) => onChange(t.replace(/[^0-9]/g, ''))}
+        style={[styles.input, { minWidth: 0, width: '100%' }]}
+      />
+    </View>
+  );
+}
+
 /** Numeric field that reports `undefined` while empty or invalid. */
 export function NumberField({
   label,

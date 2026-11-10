@@ -6,6 +6,8 @@ import * as storage from './storage';
 type ProfileState = {
   hydrated: boolean;
   profile: Profile | null;
+  /** Every saved version, oldest first (lets the planner tell what changed since a plan was built). */
+  history: Profile[];
   draft: ProfileDraft;
   hydrate: () => Promise<void>;
   /** Merge answers into the draft and persist it (autosave). */
@@ -19,11 +21,16 @@ type ProfileState = {
 export const useProfileStore = create<ProfileState>((set, get) => ({
   hydrated: false,
   profile: null,
+  history: [],
   draft: emptyDraft(),
 
   hydrate: async () => {
-    const [profile, draft] = await Promise.all([storage.loadProfile(), storage.loadDraft()]);
-    set({ profile, draft: draft ?? emptyDraft(), hydrated: true });
+    const [profile, draft, history] = await Promise.all([
+      storage.loadProfile(),
+      storage.loadDraft(),
+      storage.loadHistory(),
+    ]);
+    set({ profile, history, draft: draft ?? emptyDraft(), hydrated: true });
   },
 
   update: (patch) => {
@@ -55,7 +62,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       return { ok: false, message: parsed.error.issues[0]?.message ?? 'Some answers are missing' };
     }
     await storage.saveProfile(parsed.data);
-    set({ profile: parsed.data, draft: emptyDraft() });
+    set({ profile: parsed.data, history: [...get().history, parsed.data], draft: emptyDraft() });
     return { ok: true };
   },
 }));
