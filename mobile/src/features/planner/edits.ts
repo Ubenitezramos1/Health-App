@@ -1,9 +1,9 @@
 import type { Goal } from '@/features/profile/options';
 
 import { estimateMinutes, makeId, weeklyVolume } from './engine';
-import { getExercise } from './exercises';
+import { getExercise, isUnloaded } from './exercises';
 import { MUSCLES, type Muscle } from './muscles';
-import { goalProfileOf, prescription } from './rules';
+import { goalProfileOf, prescription, setBounds } from './rules';
 import type { Plan, PlanDay, PlanExercise } from './types';
 
 /** Re-derive volume and session minutes after any edit. Pure: returns a new plan. */
@@ -52,11 +52,24 @@ function mapExercise(plan: Plan, dayId: string, exId: string, fn: (pe: PlanExerc
 
 export const swapExercise = (plan: Plan, dayId: string, exId: string, newExerciseId: string) =>
   mapExercise(plan, dayId, exId, (pe) => {
-    const timed = getExercise(newExerciseId).timed;
-    if (timed === getExercise(pe.exerciseId).timed) return { ...pe, exerciseId: newExerciseId, notes: [] };
-    // Timed holds use seconds, so switching to/from one resets the range.
-    const { repMin, repMax } = prescription('hypertrophy', plan.settings.style, pe.role, timed);
-    return { ...pe, exerciseId: newExerciseId, repMin, repMax, notes: [] };
+    const next = getExercise(newExerciseId);
+    const prev = getExercise(pe.exerciseId);
+    if (next.timed === prev.timed && isUnloaded(next) === isUnloaded(prev))
+      return { ...pe, exerciseId: newExerciseId, notes: [], tempo: undefined };
+    // Switching between loaded, bodyweight and timed work changes how reps and effort are prescribed.
+    const rx = prescription(plan.goal ?? 'hypertrophy', plan.settings.style, pe.role, {
+      timed: next.timed,
+      unloaded: isUnloaded(next),
+    });
+    const sets = setBounds(plan.settings.style, pe.role, isUnloaded(next));
+    return {
+      ...pe,
+      exerciseId: newExerciseId,
+      ...rx,
+      sets: Math.min(Math.max(pe.sets, sets.min), sets.max),
+      notes: [],
+      tempo: undefined,
+    };
   });
 
 export const setSets = (plan: Plan, dayId: string, exId: string, sets: number) =>
@@ -90,8 +103,8 @@ export function addExercise(plan: Plan, dayId: string, exerciseId: string, prima
     id: makeId('ex'),
     exerciseId,
     role,
-    sets: plan.settings.style === 'efficient' ? 2 : 3,
-    ...prescription(goalProfileOf(primaryGoal), plan.settings.style, role, e.timed),
+    sets: setBounds(plan.settings.style, role, isUnloaded(e)).base,
+    ...prescription(goalProfileOf(primaryGoal), plan.settings.style, role, { timed: e.timed, unloaded: isUnloaded(e) }),
     notes: [],
   };
   return refresh(
@@ -107,3 +120,33 @@ export const volumeStatus = (plan: Plan, m: Muscle) => {
   if (v.sets > v.ceiling) return 'over' as const;
   return 'ok' as const;
 };
+
+/* ---------- Bodyweight steps (apply to every day the exercise appears on) ---------- */
+
+function mapByExercise(plan: Plan, exerciseId: string, fn: (pe: PlanExercise) => PlanExercise): Plan {
+  return refresh(
+    plan,
+    plan.days.map((d) => ({ ...d, exercises: d.exercises.map((pe) => (pe.exerciseId === exerciseId ? fn(pe) : pe)) })),
+  );
+}
+
+/** Turn the slow-lowering stage on or off. Starts a fresh stage so older sessions don't count toward the next step. */
+export const setTempo = (plan: Plan, exerciseId: string, on: boolean) =>
+  mapByExercise(plan, exerciseId, (pe) => ({
+    ...pe,
+    tempo: on || undefined,
+    stageSince: new Date().toISOString(),
+    stepUpSnoozedAt: undefined,
+  }));
+
+/** Move to the next (or previous) variation on every day it appears. */
+export function changeVariation(plan: Plan, fromId: string, toId: string): Plan {
+  let next = plan;
+  for (const d of plan.days)
+    for (const pe of d.exercises) if (pe.exerciseId === fromId) next = swapExercise(next, d.id, pe.id, toId);
+  return mapByExercise(next, toId, (pe) => ({ ...pe, stageSince: new Date().toISOString(), stepUpSnoozedAt: undefined }));
+}
+
+/** "Not yet": stop offering the step-up until another session is logged. */
+export const snoozeStepUp = (plan: Plan, exerciseId: string) =>
+  mapByExercise(plan, exerciseId, (pe) => ({ ...pe, stepUpSnoozedAt: new Date().toISOString() }));

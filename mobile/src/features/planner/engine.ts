@@ -3,7 +3,16 @@ import type { InjuryArea } from '@/features/profile/options';
 import { type Profile, needsMedicalClearance } from '@/features/profile/schema';
 import { ageFromDob } from '@/features/profile/units';
 
-import { EXERCISES, type Equip, type Exercise, type Pattern, getExercise, primaryMuscle } from './exercises';
+import {
+  EXERCISES,
+  type Equip,
+  type Exercise,
+  type Pattern,
+  bwIntensity,
+  getExercise,
+  isUnloaded,
+  primaryMuscle,
+} from './exercises';
 import {
   type AsymmetryRegion,
   FOCUS_TO_MUSCLES,
@@ -146,6 +155,14 @@ export function selectionContext(profile: Profile, settings: PlanSettings, scan:
 const hasEquipment = (e: Exercise, eq: SelectionContext['equipment']) =>
   eq === 'all' || e.equipment.every((req) => (Array.isArray(req) ? req.some((r) => eq.has(r)) : eq.has(req)));
 
+/** What a user can do to make bodyweight work harder: which exercises they can do, and whether they can add weight. */
+export function stepContext(profile: Profile, settings: PlanSettings) {
+  const sel = selectionContext(profile, settings, null);
+  const canAddWeight =
+    sel.equipment === 'all' || ['loaded_bag', 'dumbbells', 'kettlebell', 'water_jugs'].some((i) => (sel.equipment as Set<Equip>).has(i as Equip));
+  return { allowed: (e: Exercise) => isAllowed(e, sel), canAddWeight };
+}
+
 export function isAllowed(e: Exercise, ctx: SelectionContext): boolean {
   if (!hasEquipment(e, ctx.equipment)) return false;
   if (e.avoid?.some((a) => ctx.currentInjuries.has(a))) return false;
@@ -171,14 +188,33 @@ const PATTERN_REGION: Partial<Record<Pattern, AsymmetryRegion>> = {
   vertical_pull: 'back',
 };
 
+/** Bodyweight lifts worth programming even in a full gym. */
+const GYM_STAPLES = new Set(['pull_up', 'chin_up', 'dip']);
+
 function score(e: Exercise, ctx: SelectionContext, role: SlotRole, used: Set<string>): number {
   let s = 0;
   if (e.lengthened) s += 2;
   if (ctx.level === 'beginner') s += e.level === 1 ? 2 : e.level === 3 ? -6 : 0;
-  else if (e.level === 3) s -= 1;
+  else if (e.level === 3 && ctx.level === 'intermediate') s -= 1;
   if (ctx.strengthFocus && role === 'main' && e.load === 'barbell') s += 3;
-  // Compound lifts you can add weight to are easier to progress than bodyweight versions.
-  if (role !== 'accessory' && e.load !== 'bodyweight' && e.load !== 'band') s += ctx.level === 'beginner' ? 1 : 2;
+  // Match difficulty to the lifter (rules: bodyweight progression).
+  const bw = bwIntensity(e);
+  if (bw === null) {
+    // Lifts you can add weight to progress in small, precise steps — favored for main and secondary slots.
+    if (role === 'main') s += ctx.level === 'beginner' ? 1 : 3;
+    else if (role === 'secondary') s += ctx.level === 'beginner' ? 1 : 2;
+  } else if (ctx.level === 'beginner') {
+    if (bw === 'hard') s -= 3; // build up to these through the ladder instead
+  } else {
+    if (bw === 'easy') s -= 4; // warm-up level for trained lifters
+    // Hard bodyweight work earns its place: pull-ups, chin-ups and dips always; the rest only when there's
+    // no gym (in a gym, a loaded press or squat is the better tool). Skill-heavy moves (level 3) are reached
+    // through the ladder by intermediates rather than prescribed on day one.
+    const staple = GYM_STAPLES.has(e.id);
+    const earns = bw === 'hard' && role !== 'accessory' && (staple || ctx.equipment !== 'all');
+    const reachable = ctx.level === 'advanced' || e.level < 3 || staple;
+    if (earns && reachable) s += ctx.level === 'advanced' ? 3 : 2;
+  }
   const region = PATTERN_REGION[e.pattern];
   if (region && ctx.asymmetryRegions.has(region) && e.unilateral) s += 4;
   // Vary exercises across repeated days — except for beginners, who progress faster by practicing the same lifts.
@@ -194,7 +230,11 @@ export function pickExercise(
   usedInPlan: Set<string>,
   usedInDay: Set<string>,
 ): Exercise | null {
-  const options = EXERCISES.filter((e) => e.pattern === pattern && isAllowed(e, ctx) && !usedInDay.has(e.id));
+  // A trained lifter's main/secondary slots never get a warm-up-level move: better to skip the slot.
+  const tooEasy = (e: Exercise) => ctx.level !== 'beginner' && role !== 'accessory' && bwIntensity(e) === 'easy';
+  const options = EXERCISES.filter(
+    (e) => e.pattern === pattern && isAllowed(e, ctx) && !usedInDay.has(e.id) && !tooEasy(e),
+  );
   if (!options.length) return null;
   return options.reduce((best, e) => (score(e, ctx, role, usedInPlan) > score(best, ctx, role, usedInPlan) ? e : best));
 }
@@ -230,7 +270,9 @@ export function estimateMinutes(day: PlanDay): number {
   let seconds = WARMUP_MIN * 60;
   const seen = new Set<string>();
   for (const pe of day.exercises) {
-    const work = getExercise(pe.exerciseId).kind === 'compound' ? 45 : 40;
+    const e = getExercise(pe.exerciseId);
+    // Bodyweight/band sets run 8–25+ reps, and slow lowering adds ~2 s per rep.
+    const work = (isUnloaded(e) && !e.timed ? 70 : e.kind === 'compound' ? 45 : 40) + (pe.tempo ? 25 : 0);
     if (pe.supersetGroup) {
       if (seen.has(pe.supersetGroup)) continue;
       seen.add(pe.supersetGroup);
@@ -264,13 +306,15 @@ function makePlanExercise(ctx: Ctx, e: Exercise, role: SlotRole): PlanExercise {
     id: makeId('ex'),
     exerciseId: e.id,
     role,
-    sets: setBounds(ctx.style, role).base,
-    ...prescription(ctx.goal, ctx.style, role, e.timed),
+    sets: setBounds(ctx.style, role, isUnloaded(e)).base,
+    ...prescription(ctx.goal, ctx.style, role, { timed: e.timed, unloaded: isUnloaded(e) }),
     notes: [],
   };
 }
 
 const muscleOf = (pe: PlanExercise) => primaryMuscle(getExercise(pe.exerciseId));
+const boundsOf = (style: PlanStyle, pe: PlanExercise) =>
+  setBounds(style, pe.role, isUnloaded(getExercise(pe.exerciseId)));
 const tierRank: Record<Tier, number> = { priority: 0, standard: 1, maintain: 2 };
 const roleRank: Record<SlotRole, number> = { main: 0, secondary: 1, accessory: 2 };
 
@@ -324,7 +368,7 @@ function balanceVolume(ctx: Ctx, days: PlanDay[]) {
       // 1) add a set to an exercise for this muscle (accessories first)
       const slots = lifting
         .flatMap((d) => d.exercises)
-        .filter((pe) => muscleOf(pe) === m && pe.sets < setBounds(ctx.style, pe.role).max)
+        .filter((pe) => muscleOf(pe) === m && pe.sets < boundsOf(ctx.style, pe).max)
         .sort((a, b) => roleRank[b.role] - roleRank[a.role] || a.sets - b.sets);
       if (slots.length) {
         slots[0].sets += 1;
@@ -338,7 +382,7 @@ function balanceVolume(ctx: Ctx, days: PlanDay[]) {
       if (v <= ceiling) break;
       const slots = lifting
         .flatMap((d) => d.exercises)
-        .filter((pe) => muscleOf(pe) === m && pe.sets > setBounds(ctx.style, pe.role).min)
+        .filter((pe) => muscleOf(pe) === m && pe.sets > boundsOf(ctx.style, pe).min)
         .sort((a, b) => roleRank[b.role] - roleRank[a.role] || b.sets - a.sets);
       if (!slots.length) break;
       slots[0].sets -= 1;
@@ -361,14 +405,14 @@ const DAY_AFFINITY: Record<PlanDay['type'], Muscle[]> = {
 function addAccessory(ctx: Ctx, days: PlanDay[], m: Muscle): boolean {
   const byLoad = (a: PlanDay, b: PlanDay) => a.exercises.length - b.exercises.length;
   const fitting = days.filter((d) => DAY_AFFINITY[d.type].includes(m)).sort(byLoad);
-  const others = days.filter((d) => !DAY_AFFINITY[d.type].includes(m)).sort(byLoad);
   // Prefer a day that already trains this body part — even if it means a second exercise of the same
   // movement there — before putting e.g. shoulder or chest work on leg day.
   const passes: { days: PlanDay[]; allowSamePattern: boolean }[] = [
     { days: fitting, allowSamePattern: false },
     { days: fitting, allowSamePattern: true },
-    { days: others, allowSamePattern: false },
   ];
+  // Never fall back to a day that doesn't train this body part (e.g. rear delts on leg day);
+  // a full-body day always fits. If nothing fits, the muscle stays short and the plan says so.
   for (const pass of passes)
     for (const pattern of ISO_FOR[m])
       for (const day of pass.days) {
@@ -440,11 +484,13 @@ function fitTime(ctx: Ctx, days: PlanDay[]) {
       // Removing sets must keep EVERY credited muscle (not just the primary) at or above its floor.
       const keepsFloors = (pe: PlanExercise, sets: number) => {
         const credit = getExercise(pe.exerciseId).credit;
-        return MUSCLES.every((mm) => volume[mm] - (credit[mm] ?? 0) * sets >= ctx.targets[mm].floor);
+        // Only muscles this exercise trains matter — a muscle that's already short for other reasons
+        // (e.g. no side-delt option without equipment) mustn't block trimming everything else.
+        return MUSCLES.every((mm) => !credit[mm] || volume[mm] - (credit[mm] ?? 0) * sets >= ctx.targets[mm].floor);
       };
       for (const { pe, m } of removable) {
         if (!m) continue;
-        if (overTime && pe.sets > setBounds(ctx.style, pe.role).min && keepsFloors(pe, 1)) {
+        if (overTime && pe.sets > boundsOf(ctx.style, pe).min && keepsFloors(pe, 1)) {
           pe.sets -= 1;
           changed = true;
           break;
@@ -482,7 +528,7 @@ function topUp(ctx: Ctx, days: PlanDay[]) {
       if (volume[m] >= ctx.targets[m].target) continue;
       for (const day of days) {
         const pe = day.exercises
-          .filter((x) => muscleOf(x) === m && x.sets < setBounds(ctx.style, x.role).max)
+          .filter((x) => muscleOf(x) === m && x.sets < boundsOf(ctx.style, x).max)
           .sort((a, b) => roleRank[b.role] - roleRank[a.role])[0];
         if (!pe) continue;
         pe.sets += 1;
@@ -508,7 +554,7 @@ function balancePushPull(ctx: Ctx, days: PlanDay[], rounded: boolean) {
       .reduce((n, pe) => n + pe.sets, 0);
   for (let guard = 0; guard < 20 && setsOf(PULL_PATTERNS) < setsOf(PUSH_PATTERNS) * ratio; guard++) {
     const pull = all()
-      .filter((pe) => PULL_PATTERNS.includes(getExercise(pe.exerciseId).pattern) && pe.sets < setBounds(ctx.style, pe.role).max)
+      .filter((pe) => PULL_PATTERNS.includes(getExercise(pe.exerciseId).pattern) && pe.sets < boundsOf(ctx.style, pe).max)
       .sort((a, b) => roleRank[b.role] - roleRank[a.role] || a.sets - b.sets)[0];
     if (pull) {
       pull.sets += 1;
@@ -585,6 +631,11 @@ export function generatePlan(profile: Profile, settings: PlanSettings, scan: Sca
   topUp(ctx, days);
   addNotes(ctx, days, scan);
 
+  if (days.some((d) => d.exercises.some((x) => isUnloaded(getExercise(x.exerciseId)))))
+    ctx.why.push(
+      `Bodyweight and band exercises: 3 sets, ${prescription(ctx.goal, style, 'main', { unloaded: true }).repMin}–${prescription(ctx.goal, style, 'main', { unloaded: true }).repMax} reps, stopping 1–2 reps short of failure (last set to failure). Add reps each session — the tracker tells you when it's time for a harder version.`,
+    );
+
   const finalVolume = weeklyVolume(days);
   const volume = Object.fromEntries(
     MUSCLES.map((m) => [m, { ...tiers[m], ...targets[m], sets: finalVolume[m] } satisfies MuscleVolume]),
@@ -615,5 +666,6 @@ export function generatePlan(profile: Profile, settings: PlanSettings, scan: Sca
     restDay: REST_DAY_TEXT,
     cardio: cardioAdvice(ctx.goal, profile.primaryGoal),
     customized: false,
+    goal: ctx.goal,
   };
 }

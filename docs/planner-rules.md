@@ -247,3 +247,37 @@ Every exercise in the library is tagged with:
 - Sødal et al. (2023), *Drop sets meta-analysis* — https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10390395/
 
 Caveat: several findings above were checked against abstracts and reputable summaries, not full texts. Numbers in this doc are planning defaults, not exact effect sizes, and can be tuned.
+
+---
+
+## 10. Bodyweight and band exercises (added Nov 2026)
+
+Weight can't be adjusted in steps here, so a fixed rep target ("2 × 6–10") can leave a set far from failure.
+Effort is fixed instead, and reps float.
+
+| Rule | Value | Evidence |
+|---|---|---|
+| Effort | Stop 1–2 reps short of failure; last set to failure | Proximity to failure drives growth (Robinson 2024); failure itself isn't required (2022 meta-analysis) |
+| Rep window | 8–25 (strength/athletic 5–15, endurance 12–30) | Similar hypertrophy across low/moderate/high loads to failure (Lopez 2021); 25–35RM ≈ 8–12RM in trained men (Schoenfeld 2015); very light loads underperform (Lasevicius 2018); heavier is better for strength |
+| Sets | Always 3 (efficient) / 3–4 (full); if time is short, drop exercises, not sets | User decision |
+| Progress | About +1 rep per set per session, no ceiling | Reps are the overload |
+| Step up | Every set past the top of the window, 2 sessions in a row | Mastery, not one good day (reasoned threshold — no study gives an exact number) |
+| Step order | 3-second lowering → added weight (if available) → next variation | Smallest jump first; 0.5–8 s reps build similar muscle, >10 s worse (Schoenfeld 2015) |
+| Step back | Fewer than 6 reps on a new step | That step was too big |
+| Who decides | App offers ("Switch" / "Not yet"); never automatic | User decision |
+| After a step | Only sessions at the new step count toward the next one | Prevents back-to-back jumps |
+
+**Choosing variations by experience:** each bodyweight exercise is rated easy / moderate / hard for a trained person.
+Trained lifters never get "easy" moves (bodyweight squat, glute bridge, doorframe row) as main or secondary lifts;
+beginners don't get "hard" ones. Intermediates reach skill-heavy moves (archer push-up, shrimp squat) through the
+ladder rather than on day one. In a full gym, loaded lifts lead; only pull-ups, chin-ups and dips compete with them.
+
+**Ladders (easiest → hardest):** knee → incline → push-up → deficit → decline → archer; doorframe row → bent-knee
+inverted row → inverted row → feet-elevated; band-assisted pull-up → pull-up; bodyweight squat → split squat →
+Bulgarian → shrimp; pike → elevated pike; glute bridge → single-leg hip thrust; sliding leg curl → Nordic lowering;
+dead bug → hollow hold; chair dip → dip. Steps the user lacks equipment for, or that load an injury, are skipped.
+
+Sources: Lopez 2021 (https://pubmed.ncbi.nlm.nih.gov/33433148/) · Schoenfeld 2015 low vs high load
+(https://www.bisp-surf.de/Record/PU201510008067) · Lasevicius 2018 (https://www.frontiersin.org/articles/10.3389/fphys.2018.00402/full) ·
+Schoenfeld 2015 repetition duration (https://pubmed.ncbi.nlm.nih.gov/25601394/) · Kikuchi & Nakazato 2017
+(https://pmc.ncbi.nlm.nih.gov/articles/PMC5812864) · Kotarsky 2018 (https://pubmed.ncbi.nlm.nih.gov/29466268/)

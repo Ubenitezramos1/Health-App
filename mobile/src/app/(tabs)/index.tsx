@@ -6,6 +6,7 @@ import { Screen } from '@/components/screen';
 import { AppText, Badge, Button, Callout, Card } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { type Tip, greeting, nextWorkout, priorityMuscles, topTips, weekSets } from '@/features/dashboard/today';
+import { stepContext } from '@/features/planner/engine';
 import { getExercise } from '@/features/planner/exercises';
 import { usePlanStore } from '@/features/planner/store';
 import type { Plan } from '@/features/planner/types';
@@ -156,7 +157,7 @@ function PlanDashboard({ plan }: { plan: Plan }) {
 
   const unit = profile.units.weight;
   const next = nextWorkout(plan, logs, settings);
-  const tips = topTips(plan, logs, settings, unit, latestScan);
+  const tips = topTips(plan, logs, settings, unit, latestScan, new Date(), stepContext(profile, plan.settings));
   const focus = priorityMuscles(plan);
   const days = liftingDays(plan);
   const totalDone = logs.filter((l) => l.planId === plan.id && l.completedAt).length;

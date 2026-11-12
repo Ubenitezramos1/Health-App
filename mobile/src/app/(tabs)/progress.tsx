@@ -4,6 +4,7 @@ import { Pressable, View } from 'react-native';
 import { Screen } from '@/components/screen';
 import { AppText, Badge, Button, Callout } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import { stepContext } from '@/features/planner/engine';
 import { getExercise } from '@/features/planner/exercises';
 import { usePlanStore } from '@/features/planner/store';
 import { useProfileStore } from '@/features/profile/store';
@@ -37,7 +38,8 @@ export default function Progress() {
     .filter((l) => l.week === week)
     .flatMap((l) => l.entries.flatMap((e) => e.sets))
     .filter((s) => s.reps).length;
-  const { exercises, deload } = insights(plan, logs, settings, unit);
+  const { exercises, deload } = insights(plan, logs, settings, unit, stepContext(profile, plan.settings));
+  const harderStep = exercises.filter((e) => e.stepOffer?.direction === 'up');
   const stalled = exercises.filter((e) => e.suggestion.stalled);
   const readyToAdd = exercises.filter((e) => e.suggestion.reason === 'add_weight');
 
@@ -80,6 +82,15 @@ export default function Progress() {
             <Button label={`Make week ${deload.week} a deload`} variant="secondary" onPress={() => addDeloadWeek(plan.id, deload.week)} />
           </Callout>
         ) : null}
+        {harderStep.length ? (
+          <Callout tone="info">
+            <AppText variant="label">Ready for a harder step</AppText>
+            <AppText variant="small" tone="secondary">
+              {harderStep.map((e) => getExercise(e.exerciseId).name).join(', ')} — you&apos;ve passed {harderStep[0].pe.repMax}{' '}
+              reps on every set twice in a row. Your next workout will offer the next step.
+            </AppText>
+          </Callout>
+        ) : null}
         {readyToAdd.length ? (
           <Callout tone="info">
             <AppText variant="label">Ready to add weight</AppText>
@@ -97,7 +108,7 @@ export default function Progress() {
             </AppText>
           </Callout>
         ) : null}
-        {!deload && !readyToAdd.length && !stalled.length ? (
+        {!deload && !readyToAdd.length && !stalled.length && !harderStep.length ? (
           <AppText variant="small" tone="muted">
             {totalDone || exercises.some((e) => e.sessions)
               ? 'Keep going — beat last time by a rep.'

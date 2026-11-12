@@ -4,7 +4,7 @@ import { WEEKDAY_NAMES, formatTime, normalizeWeekdays } from '@/features/planner
 import type { Plan, PlanDay } from '@/features/planner/types';
 import type { WeightUnit } from '@/features/profile/units';
 import type { ScanRecord } from '@/features/scanner/types';
-import { currentWeek, findLog, insights, isDeloadWeek, liftingDays } from '@/features/tracker/sessions';
+import { type StepContext, currentWeek, findLog, insights, isDeloadWeek, liftingDays } from '@/features/tracker/sessions';
 import type { TrackerSettings, WorkoutLog } from '@/features/tracker/types';
 
 /** Monday = 0 … Sunday = 6 (matches plan weekdays). */
@@ -66,11 +66,21 @@ export function topTips(
   unit: WeightUnit,
   latestScan: ScanRecord | undefined,
   now = new Date(),
+  step?: StepContext,
 ): Tip[] {
   const tips: Tip[] = [];
-  const { exercises, deload } = insights(plan, logs, settings, unit);
+  const { exercises, deload } = insights(plan, logs, settings, unit, step);
   if (deload)
     tips.push({ tone: 'warning', title: `Deload suggested for week ${deload.week}`, body: deload.reason, action: 'deload' });
+
+  const harder = exercises.filter((e) => e.stepOffer?.direction === 'up');
+  if (harder.length)
+    tips.push({
+      tone: 'progress',
+      title: 'Ready for a harder step',
+      body: `${harder.map((e) => getExercise(e.exerciseId).name).slice(0, 3).join(', ')} — mastered. Your next workout will offer the next step.`,
+      action: 'progress',
+    });
 
   const ready = exercises.filter((e) => e.suggestion.reason === 'add_weight');
   if (ready.length)

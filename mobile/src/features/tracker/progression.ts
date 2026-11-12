@@ -37,6 +37,10 @@ export type Suggestion = {
   stalled: boolean;
   /** Last session's sets, for "Last time: …". */
   last: SetLog[] | null;
+  /** Bodyweight/band: every set went past the top of the window for 2 sessions in a row → offer one step up. */
+  stepUp: boolean;
+  /** Bodyweight/band: the last session came in under ~6 reps → this step looks too hard, offer one step back. */
+  stepBack: boolean;
 };
 
 const STEPS: Record<WeightUnit, Partial<Record<LoadType, { normal: number; small: number }>>> = {
@@ -87,7 +91,7 @@ type State = { weight: number | null; reps: number[] };
 export function suggest(
   history: Performance[],
   rx: Rx,
-  ctx: { load: LoadType; unit: WeightUnit; smallSteps: boolean },
+  ctx: { load: LoadType; unit: WeightUnit; smallSteps: boolean; unloaded?: boolean },
 ): Suggestion {
   const step = weightStep(ctx.load, ctx.unit, ctx.smallSteps);
   let state: State | null = null;
@@ -95,6 +99,9 @@ export function suggest(
   let last: SetLog[] | null = null;
   // (weight, total reps) per session, for stall detection
   const marks: { weight: number; total: number }[] = [];
+  // Bodyweight/band sessions: did every set pass the top of the window? And the best set, for step-back.
+  const aboveTop: boolean[] = [];
+  let lastBest = Infinity;
 
   for (const perf of history) {
     const sets = done(perf.sets, ctx.unit);
@@ -107,6 +114,26 @@ export function suggest(
 
     const allAtMax = atTop.length >= Math.min(perf.requiredSets, rx.sets) && atTop.every((r) => r >= rx.repMax);
     const targets: number[] | null = state && state.weight === topWeight ? state.reps : null;
+
+    if (ctx.unloaded) {
+      // Reps are the overload here: keep adding about one per set, with no ceiling — passing the top of the
+      // window only *offers* a harder step (the user decides), it never changes the exercise by itself.
+      aboveTop.push(atTop.length >= Math.min(perf.requiredSets, rx.sets) && atTop.every((r) => r > rx.repMax));
+      lastBest = Math.max(...atTop);
+      let missed = false;
+      const next = Array.from({ length: rx.sets }, (_, i): number => {
+        const achieved = atTop[i] ?? atTop[atTop.length - 1];
+        const target: number | undefined = targets?.[i];
+        if (target !== undefined && achieved < target) {
+          missed = true;
+          return target;
+        }
+        return achieved + 1;
+      });
+      state = { weight: topWeight, reps: next };
+      reason = missed ? 'repeat_missed' : 'add_reps';
+      continue;
+    }
 
     if (allAtMax) {
       if (topWeight !== null && step) {
@@ -146,9 +173,22 @@ export function suggest(
   const n = marks.length;
   const stalled = n >= 3 && noGain(marks[n - 3], marks[n - 2]) && noGain(marks[n - 2], marks[n - 1]);
 
+  // Mastery = 2 sessions in a row with every set past the top (one good day isn't enough).
+  const k = aboveTop.length;
+  const stepUp = !!ctx.unloaded && k >= 2 && aboveTop[k - 1] && aboveTop[k - 2];
+  const stepBack = !!ctx.unloaded && k >= 1 && lastBest < Math.min(6, rx.repMin);
+
   return state
-    ? { weight: state.weight, reps: state.reps, reason, stalled, last }
-    : { weight: null, reps: fill(rx.sets, rx.repMin), reason: 'first_time', stalled: false, last: null };
+    ? { weight: state.weight, reps: state.reps, reason, stalled: stalled && !ctx.unloaded, last, stepUp, stepBack }
+    : {
+        weight: null,
+        reps: fill(rx.sets, rx.repMin),
+        reason: 'first_time',
+        stalled: false,
+        last: null,
+        stepUp: false,
+        stepBack: false,
+      };
 }
 
 /** Deload week: about half the sets, ~10% lighter, easy effort (rules §7). */
@@ -166,6 +206,13 @@ export const REASON_TEXT: Record<SuggestionReason, string> = {
   add_weight: 'You hit the top of the range on every set — time to add weight.',
   too_heavy: 'Last time was below the rep range — a little lighter this time.',
   make_harder: 'Top of the range on every set — make it harder: add load, slow the lowering, or pick a harder variation.',
+};
+
+/** Bodyweight/band versions of the explanations above. */
+export const UNLOADED_REASON_TEXT: Partial<Record<SuggestionReason, string>> = {
+  first_time: 'First time: do as many good reps as you can, stopping 1–2 short of failure — that sets your starting point.',
+  add_reps: 'Beat last time by about one rep per set.',
+  repeat_missed: 'Missed a target last time — same goal again. Bad days happen; consistency wins.',
 };
 
 export const STALL_TEXT =

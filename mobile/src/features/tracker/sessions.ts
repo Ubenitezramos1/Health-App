@@ -1,4 +1,4 @@
-import { type Exercise, getExercise } from '@/features/planner/exercises';
+import { type Exercise, getExercise, isUnloaded, ladderStep } from '@/features/planner/exercises';
 import type { Plan, PlanDay, PlanExercise } from '@/features/planner/types';
 import type { WeightUnit } from '@/features/profile/units';
 
@@ -69,9 +69,15 @@ export function lowCheckInStreak(logs: WorkoutLog[]): boolean {
 /* ---------- Targets for a session ---------- */
 
 /** Past performances of one exercise before `before`, oldest first. Deload sessions don't count. */
-export function historyFor(logs: WorkoutLog[], exerciseId: string, before: string, excludeLogId?: string): Performance[] {
+export function historyFor(
+  logs: WorkoutLog[],
+  exerciseId: string,
+  before: string,
+  excludeLogId?: string,
+  since = '',
+): Performance[] {
   return logs
-    .filter((l) => l.id !== excludeLogId && !l.deload && l.startedAt < before)
+    .filter((l) => l.id !== excludeLogId && !l.deload && l.startedAt < before && l.startedAt >= since)
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
     .flatMap((l) =>
       l.entries
@@ -89,23 +95,74 @@ export type ExerciseTarget = {
   reps: number[];
   rir: string;
   deload: boolean;
+  /** Bodyweight/band: a one-step change the user can accept (never applied automatically). */
+  stepOffer: StepOffer | null;
 };
+
+export type StepOffer =
+  | { direction: 'up'; kind: 'tempo' }
+  | { direction: 'up'; kind: 'add_weight' }
+  | { direction: 'up'; kind: 'variation'; to: Exercise }
+  | { direction: 'up'; kind: 'stronger_band' }
+  | { direction: 'up'; kind: 'top_of_ladder' }
+  | { direction: 'down'; kind: 'tempo_off' }
+  | { direction: 'down'; kind: 'variation'; to: Exercise };
+
+/** What the user can do to make (or ease) an exercise — from their equipment and injuries. */
+export type StepContext = { allowed: (e: Exercise) => boolean; canAddWeight: boolean };
+
+/** Rules: slow lowering → added weight → next variation, one step at a time; step back if under ~6 reps. */
+export function stepOfferFor(
+  pe: PlanExercise,
+  exercise: Exercise,
+  s: Suggestion,
+  lastSessionAt: string | null,
+  step: StepContext | undefined,
+): StepOffer | null {
+  if (!step || !isUnloaded(exercise) || exercise.timed) return null;
+  // "Not yet" holds until another session is logged.
+  if (pe.stepUpSnoozedAt && (!lastSessionAt || lastSessionAt <= pe.stepUpSnoozedAt)) return null;
+
+  if (s.stepBack) {
+    if (pe.tempo) return { direction: 'down', kind: 'tempo_off' };
+    const easier = ladderStep(exercise.id, -1, step.allowed);
+    return easier ? { direction: 'down', kind: 'variation', to: easier } : null;
+  }
+  if (!s.stepUp) return null;
+  if (exercise.load === 'band') return { direction: 'up', kind: 'stronger_band' };
+  if (!pe.tempo) return { direction: 'up', kind: 'tempo' };
+  const usedAddedWeight = (s.last ?? []).some((set) => (set.weight ?? 0) > 0);
+  if (step.canAddWeight && !usedAddedWeight) return { direction: 'up', kind: 'add_weight' };
+  const harder = ladderStep(exercise.id, 1, step.allowed);
+  return harder ? { direction: 'up', kind: 'variation', to: harder } : { direction: 'up', kind: 'top_of_ladder' };
+}
 
 export function sessionTargets(
   day: PlanDay,
   log: WorkoutLog | null,
   logs: WorkoutLog[],
-  opts: { unit: WeightUnit; smallSteps: boolean; deload: boolean },
+  opts: { unit: WeightUnit; smallSteps: boolean; deload: boolean; step?: StepContext },
 ): ExerciseTarget[] {
   const before = log?.startedAt ?? '9999';
   return day.exercises.map((pe) => {
     const exercise = getExercise(pe.exerciseId);
     const rx = { sets: pe.sets, repMin: pe.repMin, repMax: pe.repMax };
-    const suggestion = suggest(historyFor(logs, pe.exerciseId, before, log?.id), rx, {
+    const unloaded = isUnloaded(exercise) && !exercise.timed;
+    // After a step change (tempo on, new variation), only sessions at the new step count.
+    const history = historyFor(logs, pe.exerciseId, before, log?.id, unloaded ? (pe.stageSince ?? '') : '');
+    const suggestion = suggest(history, rx, {
       load: exercise.load,
       unit: opts.unit,
       smallSteps: opts.smallSteps,
+      unloaded,
     });
+    const lastSessionAt =
+      logs
+        .filter((l) => l.id !== log?.id && l.startedAt < before && l.entries.some((e) => e.exerciseId === pe.exerciseId))
+        .map((l) => l.startedAt)
+        .sort()
+        .at(-1) ?? null;
+    const stepOffer = log?.completedAt || opts.deload ? null : stepOfferFor(pe, exercise, suggestion, lastSessionAt, opts.step);
     let { weight, reps } = suggestion;
     let rir = pe.rir;
     if (opts.deload) {
@@ -116,7 +173,7 @@ export function sessionTargets(
     } else if (log?.adjustment === 'easier_rir') {
       rir = `${pe.rir} +1`;
     }
-    return { pe, exercise, suggestion, weight, reps, rir, deload: opts.deload };
+    return { pe, exercise, suggestion, weight, reps, rir, deload: opts.deload, stepOffer };
   });
 }
 
@@ -127,6 +184,7 @@ export type ExerciseInsight = {
   pe: PlanExercise;
   suggestion: Suggestion;
   sessions: number;
+  stepOffer: StepOffer | null;
 };
 
 export type DeloadAdvice = { week: number; reason: string } | null;
@@ -136,6 +194,7 @@ export function insights(
   logs: WorkoutLog[],
   settings: TrackerSettings,
   unit: WeightUnit,
+  step?: StepContext,
 ): { exercises: ExerciseInsight[]; deload: DeloadAdvice } {
   const seen = new Set<string>();
   const exercises: ExerciseInsight[] = [];
@@ -143,13 +202,28 @@ export function insights(
     for (const pe of day.exercises) {
       if (seen.has(pe.exerciseId)) continue;
       seen.add(pe.exerciseId);
-      const history = historyFor(logs, pe.exerciseId, '9999');
+      const exercise = getExercise(pe.exerciseId);
+      const unloaded = isUnloaded(exercise) && !exercise.timed;
+      const history = historyFor(logs, pe.exerciseId, '9999', undefined, unloaded ? (pe.stageSince ?? '') : '');
       const suggestion = suggest(history, { sets: pe.sets, repMin: pe.repMin, repMax: pe.repMax }, {
-        load: getExercise(pe.exerciseId).load,
+        load: exercise.load,
         unit,
         smallSteps: settings.smallSteps,
+        unloaded,
       });
-      exercises.push({ exerciseId: pe.exerciseId, pe, suggestion, sessions: history.filter((h) => h.sets.some((s) => s.reps)).length });
+      const lastSessionAt =
+        logs
+          .filter((l) => l.entries.some((e) => e.exerciseId === pe.exerciseId))
+          .map((l) => l.startedAt)
+          .sort()
+          .at(-1) ?? null;
+      exercises.push({
+        exerciseId: pe.exerciseId,
+        pe,
+        suggestion,
+        sessions: history.filter((h) => h.sets.some((s) => s.reps)).length,
+        stepOffer: stepOfferFor(pe, exercise, suggestion, lastSessionAt, step),
+      });
     }
 
   const week = currentWeek(plan, logs);

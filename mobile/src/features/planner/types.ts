@@ -1,4 +1,5 @@
 import type { Muscle, Tier } from './muscles';
+import type { GoalProfile } from './rules';
 
 export type PlanStyle = 'efficient' | 'full';
 export type ScheduleType = 'loose' | 'days' | 'exact';
@@ -32,6 +33,12 @@ export type PlanExercise = {
   /** Exercises sharing a group are done as a superset (alternate sets, rest after the pair). */
   supersetGroup?: string;
   notes: string[];
+  /** Slow-lowering stage (3-second lowering) — a bodyweight step-up before a harder variation. */
+  tempo?: boolean;
+  /** When the current step (variation or tempo) started; only sessions after it count toward the next step. */
+  stageSince?: string;
+  /** User tapped "Not yet" on a step-up; ask again after their next session. */
+  stepUpSnoozedAt?: string;
 };
 
 export type PlanDay = {
@@ -64,6 +71,8 @@ export type Plan = {
   days: PlanDay[];
   volume: Record<Muscle, MuscleVolume>;
   sessionBudgetMin: number;
+  /** Rep/effort profile from the main goal (older plans may lack it). */
+  goal?: GoalProfile;
   blockWeeks: number;
   deloadWeek: number | null;
   why: string[];

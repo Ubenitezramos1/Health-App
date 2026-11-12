@@ -45,7 +45,10 @@ export function volumeTargets(style: PlanStyle, level: Level, tier: Tier, muscle
 }
 
 /** Sets per exercise allowed by style and role — rules §3.2 / §3b. */
-export function setBounds(style: PlanStyle, role: SlotRole) {
+export function setBounds(style: PlanStyle, role: SlotRole, unloaded = false) {
+  // Bodyweight/band sets can't be made heavier on the spot, so each needs more company: always 3 sets.
+  // If time is short, the planner drops whole exercises rather than going below 3 (user's choice).
+  if (unloaded) return style === 'efficient' ? { min: 3, max: 3, base: 3 } : { min: 3, max: 4, base: 3 };
   if (style === 'efficient') return role === 'accessory' ? { min: 2, max: 3, base: 2 } : { min: 2, max: 2, base: 2 };
   return role === 'accessory' ? { min: 2, max: 4, base: 3 } : { min: 2, max: 4, base: 3 };
 }
@@ -84,7 +87,32 @@ const REPS: Record<GoalProfile, Record<SlotRole, Range>> = {
   general: { main: [8, 12], secondary: [8, 12], accessory: [10, 15] },
 };
 
-export function prescription(goal: GoalProfile, style: PlanStyle, role: SlotRole, timed = false) {
+/**
+ * Bodyweight/band rep windows. Muscle grows across ~6–30 reps when sets end near failure (Lopez 2021;
+ * Schoenfeld 2015 25–35RM ≈ 8–12RM in trained men), but very light loads underperform (Lasevicius 2018).
+ * So reps float inside a window, effort is fixed, and passing the top means "make it harder".
+ */
+const UNLOADED_REPS: Record<GoalProfile, Range> = {
+  hypertrophy: [8, 25],
+  general: [8, 25],
+  strength: [5, 15],
+  athletic: [5, 15],
+  endurance: [12, 30],
+};
+
+export const UNLOADED_RIR = '1–2 short of failure, last set to failure';
+
+export function prescription(
+  goal: GoalProfile,
+  style: PlanStyle,
+  role: SlotRole,
+  opts: { timed?: boolean; unloaded?: boolean } = {},
+) {
+  const { timed = false, unloaded = false } = opts;
+  if (unloaded && !timed) {
+    const [repMin, repMax] = UNLOADED_REPS[goal];
+    return { repMin, repMax, rir: UNLOADED_RIR, restSec: role === 'accessory' ? 75 : 105 };
+  }
   const [repMin, repMax] = timed ? ([30, 45] as const) : REPS[goal][role];
   const heavyMain = role === 'main' && (goal === 'strength' || goal === 'athletic');
   const rir = timed

@@ -84,7 +84,7 @@ describe('double progression (user example: DB incline press, 2 × 5–8)', () =
 
 describe('deload and steps', () => {
   it('halves sets and lightens ~10%', () => {
-    const d = deloadVersion({ weight: 100, reps: [5, 5, 5], reason: 'add_reps', stalled: false, last: null }, { sets: 3, repMin: 5, repMax: 8 }, 'barbell', 'lb');
+    const d = deloadVersion({ weight: 100, reps: [5, 5, 5], reason: 'add_reps', stalled: false, last: null, stepUp: false, stepBack: false }, { sets: 3, repMin: 5, repMax: 8 }, 'barbell', 'lb');
     expect(d).toEqual({ weight: 90, reps: [5, 5] });
   });
 
