@@ -117,10 +117,12 @@ export const equipmentSchema = z
       access: z.enum(ids(EQUIPMENT_ACCESS), { error: 'Pick your equipment access' }),
       items: z.array(z.enum(ids(EQUIPMENT_ITEMS))),
       maxDumbbellKg: z.number().positive().max(100).optional(),
+      /** Free text for anything not on the list; common items are recognized (see equipment-text.ts). */
+      other: z.string().trim().max(OTHER_MAX, { error: `Keep it under ${OTHER_MAX} characters` }).optional(),
     }),
   })
-  .refine((v) => v.equipment.access !== 'limited' || v.equipment.items.length > 0, {
-    error: 'Pick the equipment you have',
+  .refine((v) => v.equipment.access !== 'limited' || v.equipment.items.length > 0 || !!v.equipment.other, {
+    error: 'Pick the equipment you have, or type it in',
     path: ['equipment', 'items'],
   });
 

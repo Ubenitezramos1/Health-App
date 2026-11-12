@@ -46,6 +46,7 @@ const STEPS: Record<WeightUnit, Partial<Record<LoadType, { normal: number; small
     machine: { normal: 5, small: 2.5 },
     cable: { normal: 5, small: 2.5 },
     kettlebell: { normal: 9, small: 9 }, // kettlebells jump ~4 kg
+    household: { normal: 5, small: 2.5 }, // add a book or a bottle of water
   },
   kg: {
     barbell: { normal: 2.5, small: 1.25 },
@@ -53,6 +54,7 @@ const STEPS: Record<WeightUnit, Partial<Record<LoadType, { normal: number; small
     machine: { normal: 2.5, small: 1.25 },
     cable: { normal: 2.5, small: 1.25 },
     kettlebell: { normal: 4, small: 4 },
+    household: { normal: 2, small: 1 },
   },
 };
 

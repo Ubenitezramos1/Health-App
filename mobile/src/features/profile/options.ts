@@ -159,12 +159,13 @@ export const SESSION_LENGTHS = [
 ] as const satisfies readonly Option[];
 
 export const EQUIPMENT_ACCESS = [
-  { id: 'none', label: 'No equipment', description: 'Bodyweight only' },
+  { id: 'none', label: 'No equipment', description: 'Bodyweight, plus everyday items around the house' },
   { id: 'limited', label: 'Some equipment', description: 'Home gym or a few pieces' },
   { id: 'full', label: 'Full gym', description: 'Machines, cables, barbells, dumbbells' },
 ] as const satisfies readonly Option[];
 
-export const EQUIPMENT_ITEMS = [
+/** Gym / home-gym gear. */
+export const GEAR_ITEMS = [
   { id: 'dumbbells', label: 'Dumbbells' },
   { id: 'bands', label: 'Resistance bands' },
   { id: 'bench', label: 'Bench' },
@@ -173,7 +174,18 @@ export const EQUIPMENT_ITEMS = [
   { id: 'barbell', label: 'Barbell and plates' },
   { id: 'squat_rack', label: 'Squat rack' },
   { id: 'cable', label: 'Cable machine' },
+  { id: 'suspension', label: 'Suspension trainer / rings' },
 ] as const satisfies readonly Option[];
+
+/** Everyday items that can stand in for equipment (offered for "No equipment" and "Some equipment"). */
+export const HOUSEHOLD_ITEMS = [
+  { id: 'loaded_bag', label: 'Loaded backpack or bag', description: 'Filled with books or water bottles' },
+  { id: 'water_jugs', label: 'Water jugs', description: 'About 8 lb per gallon, more with sand' },
+  { id: 'chair_step', label: 'Sturdy chair or step' },
+  { id: 'table_doorframe', label: 'Sturdy table or doorframe' },
+] as const satisfies readonly Option[];
+
+export const EQUIPMENT_ITEMS = [...GEAR_ITEMS, ...HOUSEHOLD_ITEMS] as const;
 
 type Ids<T extends readonly Option[]> = T[number]['id'];
 

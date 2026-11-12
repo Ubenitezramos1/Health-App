@@ -26,7 +26,7 @@ export type Pattern =
 export type Equip = EquipmentItem | 'machine';
 
 /** How weight is added — the tracker uses this to pick the smallest load step. */
-export type LoadType = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'kettlebell' | 'band' | 'bodyweight';
+export type LoadType = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'kettlebell' | 'band' | 'bodyweight' | 'household';
 
 export type Exercise = {
   id: string;
@@ -88,10 +88,10 @@ export const EXERCISES: Exercise[] = [
   ex('single_leg_rdl', 'Single-leg Romanian deadlift', 'hinge', 'compound', HINGE, [], 'bodyweight', 2, { lengthened: true, unilateral: true, avoid: ['ankle'] }),
 
   // Lunge / single-leg
-  ex('bulgarian_split_squat', 'Bulgarian split squat', 'lunge', 'compound', SQUAT, ['bench'], 'dumbbell', 2, { lengthened: true, unilateral: true, avoid: ['knee'] }),
+  ex('bulgarian_split_squat', 'Bulgarian split squat', 'lunge', 'compound', SQUAT, [['bench', 'chair_step']], 'dumbbell', 2, { lengthened: true, unilateral: true, avoid: ['knee'] }),
   ex('db_reverse_lunge', 'Dumbbell reverse lunge', 'lunge', 'compound', SQUAT, ['dumbbells'], 'dumbbell', 1, { unilateral: true, avoid: ['knee'] }),
   ex('reverse_lunge', 'Reverse lunge', 'lunge', 'compound', SQUAT, [], 'bodyweight', 1, { unilateral: true, avoid: ['knee'] }),
-  ex('step_up', 'Step-up', 'lunge', 'compound', SQUAT, ['bench'], 'dumbbell', 1, { unilateral: true, avoid: ['knee'] }),
+  ex('step_up', 'Step-up', 'lunge', 'compound', SQUAT, [['bench', 'chair_step']], 'dumbbell', 1, { unilateral: true, avoid: ['knee'] }),
 
   // Horizontal push
   ex('barbell_bench_press', 'Barbell bench press', 'horizontal_push', 'compound', PUSH, ['barbell', 'bench'], 'barbell', 2, { avoid: ['shoulder'] }),
@@ -118,7 +118,7 @@ export const EXERCISES: Exercise[] = [
   ex('seated_cable_row', 'Seated cable row', 'horizontal_pull', 'compound', ROW, ['cable'], 'cable', 1, { lengthened: true }),
   ex('machine_row', 'Machine row', 'horizontal_pull', 'compound', ROW, ['machine'], 'machine', 1),
   ex('barbell_row', 'Barbell row', 'horizontal_pull', 'compound', ROW, ['barbell'], 'barbell', 2, { avoid: ['lower_back'] }),
-  ex('inverted_row', 'Inverted row (bar or sturdy table)', 'horizontal_pull', 'compound', ROW, [], 'bodyweight', 2),
+  ex('inverted_row', 'Inverted row (under a sturdy table or low bar)', 'horizontal_pull', 'compound', ROW, [['table_doorframe', 'squat_rack']], 'bodyweight', 2),
   ex('band_row', 'Band row', 'horizontal_pull', 'compound', ROW, ['bands'], 'band', 1),
 
   // Vertical pull
@@ -176,7 +176,7 @@ export const EXERCISES: Exercise[] = [
 
   // Glutes
   ex('barbell_hip_thrust', 'Barbell hip thrust', 'glute_iso', 'isolation', { glutes: 1, hamstrings: 0.5 }, ['barbell', 'bench'], 'barbell', 2),
-  ex('db_hip_thrust', 'Dumbbell hip thrust', 'glute_iso', 'isolation', { glutes: 1, hamstrings: 0.5 }, ['dumbbells', 'bench'], 'dumbbell', 1),
+  ex('db_hip_thrust', 'Dumbbell hip thrust', 'glute_iso', 'isolation', { glutes: 1, hamstrings: 0.5 }, ['dumbbells', ['bench', 'chair_step']], 'dumbbell', 1),
   ex('hip_abduction', 'Hip abduction machine', 'glute_iso', 'isolation', { glutes: 1 }, ['machine'], 'machine', 1),
   ex('cable_kickback', 'Cable glute kickback', 'glute_iso', 'isolation', { glutes: 1 }, ['cable'], 'cable', 1, { unilateral: true }),
   ex('glute_bridge', 'Glute bridge', 'glute_iso', 'isolation', { glutes: 1, hamstrings: 0.5 }, [], 'bodyweight', 1),
@@ -193,6 +193,36 @@ export const EXERCISES: Exercise[] = [
   ex('pallof_press', 'Pallof press', 'core', 'isolation', { core: 1 }, [['cable', 'bands']], 'cable', 1),
   ex('dead_bug', 'Dead bug', 'core', 'isolation', { core: 1 }, [], 'bodyweight', 1),
   ex('plank', 'Plank', 'core', 'isolation', { core: 1 }, [], 'bodyweight', 1, { timed: true, avoid: ['shoulder'] }),
+
+  // Everyday items — loaded backpack/bag and water jugs (weight tracked like dumbbells)
+  ex('bag_squat', 'Backpack squat (bag hugged at chest)', 'squat', 'compound', SQUAT, ['loaded_bag'], 'household', 1, { avoid: ['knee'] }),
+  ex('bag_rdl', 'Backpack Romanian deadlift', 'hinge', 'compound', HINGE, ['loaded_bag'], 'household', 1, { lengthened: true, avoid: ['lower_back'] }),
+  ex('bag_reverse_lunge', 'Backpack reverse lunge', 'lunge', 'compound', SQUAT, ['loaded_bag'], 'household', 1, { unilateral: true, avoid: ['knee'] }),
+  ex('bag_floor_press', 'Backpack floor press', 'horizontal_push', 'compound', PUSH, ['loaded_bag'], 'household', 1, { avoid: ['shoulder'] }),
+  ex('bag_overhead_press', 'Backpack overhead press', 'vertical_push', 'compound', OVERHEAD, ['loaded_bag'], 'household', 1, { avoid: ['shoulder', 'neck'] }),
+  ex('bag_row', 'Bent-over backpack row', 'horizontal_pull', 'compound', ROW, ['loaded_bag'], 'household', 1, { avoid: ['lower_back'] }),
+  ex('bag_curl', 'Backpack curl', 'biceps_iso', 'isolation', { biceps: 1 }, ['loaded_bag'], 'household', 1),
+  ex('bag_lateral_raise', 'Single-arm backpack lateral raise', 'side_delt_iso', 'isolation', { side_delts: 1 }, ['loaded_bag'], 'household', 1, { unilateral: true }),
+  ex('bag_hip_thrust', 'Backpack hip thrust (shoulders on couch or chair)', 'glute_iso', 'isolation', { glutes: 1, hamstrings: 0.5 }, ['loaded_bag'], 'household', 1),
+  ex('jug_curl', 'Water jug curl', 'biceps_iso', 'isolation', { biceps: 1 }, ['water_jugs'], 'household', 1),
+  ex('jug_lateral_raise', 'Water jug lateral raise', 'side_delt_iso', 'isolation', { side_delts: 1 }, ['water_jugs'], 'household', 1),
+  ex('jug_row', 'Single-arm water jug row', 'horizontal_pull', 'compound', ROW, ['water_jugs'], 'household', 1, { unilateral: true, lengthened: true }),
+  ex('jug_rear_delt_fly', 'Water jug rear delt fly', 'rear_delt_iso', 'isolation', { rear_delts: 1 }, ['water_jugs'], 'household', 1),
+  ex('jug_overhead_extension', 'Overhead water jug triceps extension', 'triceps_iso', 'isolation', { triceps: 1 }, ['water_jugs'], 'household', 1, { lengthened: true, avoid: ['elbow', 'shoulder'] }),
+
+  // Sturdy chair or step
+  ex('incline_push_up', 'Incline push-up (hands on a chair)', 'horizontal_push', 'compound', PUSH, ['chair_step'], 'bodyweight', 1, { avoid: ['wrist'] }),
+  ex('decline_push_up', 'Decline push-up (feet on a chair)', 'horizontal_push', 'compound', { ...PUSH, front_delts: 1 }, ['chair_step'], 'bodyweight', 2, { avoid: ['wrist', 'shoulder'] }),
+  ex('chair_dip', 'Bench dip (on a chair)', 'triceps_iso', 'isolation', { triceps: 1, chest: 0.5 }, ['chair_step'], 'bodyweight', 1, { avoid: ['shoulder', 'elbow', 'wrist'] }),
+
+  // Sturdy table or doorframe
+  ex('doorframe_row', 'Doorframe row (towel around the frame)', 'horizontal_pull', 'compound', ROW, ['table_doorframe'], 'bodyweight', 1),
+
+  // Suspension trainer / rings
+  ex('suspension_row', 'Suspension row (TRX / rings)', 'horizontal_pull', 'compound', ROW, ['suspension'], 'bodyweight', 1, { lengthened: true }),
+  ex('suspension_push_up', 'Suspension push-up (TRX / rings)', 'horizontal_push', 'compound', { ...PUSH, core: 0.5 }, ['suspension'], 'bodyweight', 2, { lengthened: true, avoid: ['shoulder', 'wrist'] }),
+  ex('suspension_curl', 'Suspension biceps curl (TRX / rings)', 'biceps_iso', 'isolation', { biceps: 1 }, ['suspension'], 'bodyweight', 1),
+  ex('suspension_face_pull', 'Suspension face pull / Y-raise', 'rear_delt_iso', 'isolation', { rear_delts: 1, back: 0.5 }, ['suspension'], 'bodyweight', 1),
 ];
 
 const BY_ID = new Map(EXERCISES.map((e) => [e.id, e]));

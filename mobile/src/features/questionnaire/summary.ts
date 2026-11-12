@@ -126,9 +126,12 @@ export function summarize(d: ProfileDraft): SummarySection[] {
       title: 'Equipment',
       rows: [
         { label: 'Access', value: labelOf(EQUIPMENT_ACCESS, d.equipment?.access) || '—' },
-        ...(d.equipment?.access === 'limited'
+        ...(d.equipment && d.equipment.access !== 'full'
           ? [
-              { label: 'Items', value: list(EQUIPMENT_ITEMS, d.equipment.items) },
+              ...(d.equipment.items.length || d.equipment.access === 'limited'
+                ? [{ label: 'Items', value: list(EQUIPMENT_ITEMS, d.equipment.items) }]
+                : []),
+              ...(d.equipment.other?.trim() ? [{ label: 'Other equipment', value: d.equipment.other.trim() }] : []),
               ...(d.equipment.maxDumbbellKg
                 ? [{ label: 'Heaviest dumbbell', value: formatWeight(d.equipment.maxDumbbellKg, units.weight) }]
                 : []),

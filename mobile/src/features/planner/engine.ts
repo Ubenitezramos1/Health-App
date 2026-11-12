@@ -1,3 +1,4 @@
+import { effectiveItems } from '@/features/profile/equipment-text';
 import type { InjuryArea } from '@/features/profile/options';
 import { type Profile, needsMedicalClearance } from '@/features/profile/schema';
 import { ageFromDob } from '@/features/profile/units';
@@ -132,7 +133,8 @@ export function selectionContext(profile: Profile, settings: PlanSettings, scan:
     equipment:
       profile.equipment.access === 'full'
         ? 'all'
-        : new Set<Equip>(profile.equipment.access === 'limited' ? profile.equipment.items : []),
+        : // Ticked items (gear and everyday items) plus anything recognized in the typed-in text.
+          new Set<Equip>(effectiveItems(profile.equipment)),
     currentInjuries: new Set(profile.injuries.filter((i) => i.status === 'current').map((i) => i.area)),
     lowRiskOnly: needsMedicalClearance(profile) && !settings.clearanceConfirmed,
     level: levelOf(profile.experience),
@@ -175,6 +177,8 @@ function score(e: Exercise, ctx: SelectionContext, role: SlotRole, used: Set<str
   if (ctx.level === 'beginner') s += e.level === 1 ? 2 : e.level === 3 ? -6 : 0;
   else if (e.level === 3) s -= 1;
   if (ctx.strengthFocus && role === 'main' && e.load === 'barbell') s += 3;
+  // Compound lifts you can add weight to are easier to progress than bodyweight versions.
+  if (role !== 'accessory' && e.load !== 'bodyweight' && e.load !== 'band') s += ctx.level === 'beginner' ? 1 : 2;
   const region = PATTERN_REGION[e.pattern];
   if (region && ctx.asymmetryRegions.has(region) && e.unilateral) s += 4;
   // Vary exercises across repeated days — except for beginners, who progress faster by practicing the same lifts.
@@ -355,22 +359,27 @@ const DAY_AFFINITY: Record<PlanDay['type'], Muscle[]> = {
 };
 
 function addAccessory(ctx: Ctx, days: PlanDay[], m: Muscle): boolean {
-  const candidates = [...days].sort(
-    (a, b) =>
-      Number(!DAY_AFFINITY[a.type].includes(m)) - Number(!DAY_AFFINITY[b.type].includes(m)) ||
-      a.exercises.length - b.exercises.length,
-  );
-  for (const pattern of ISO_FOR[m]) {
-    for (const day of candidates) {
-      const usedInDay = new Set(day.exercises.map((x) => x.exerciseId));
-      if (day.exercises.some((x) => getExercise(x.exerciseId).pattern === pattern)) continue;
-      const usedInPlan = new Set(days.flatMap((d) => d.exercises.map((x) => x.exerciseId)));
-      const e = pickExercise(pattern, ctx.sel, 'accessory', usedInPlan, usedInDay);
-      if (!e) continue;
-      day.exercises.push(makePlanExercise(ctx, e, 'accessory'));
-      return true;
-    }
-  }
+  const byLoad = (a: PlanDay, b: PlanDay) => a.exercises.length - b.exercises.length;
+  const fitting = days.filter((d) => DAY_AFFINITY[d.type].includes(m)).sort(byLoad);
+  const others = days.filter((d) => !DAY_AFFINITY[d.type].includes(m)).sort(byLoad);
+  // Prefer a day that already trains this body part — even if it means a second exercise of the same
+  // movement there — before putting e.g. shoulder or chest work on leg day.
+  const passes: { days: PlanDay[]; allowSamePattern: boolean }[] = [
+    { days: fitting, allowSamePattern: false },
+    { days: fitting, allowSamePattern: true },
+    { days: others, allowSamePattern: false },
+  ];
+  for (const pass of passes)
+    for (const pattern of ISO_FOR[m])
+      for (const day of pass.days) {
+        if (!pass.allowSamePattern && day.exercises.some((x) => getExercise(x.exerciseId).pattern === pattern)) continue;
+        const usedInDay = new Set(day.exercises.map((x) => x.exerciseId));
+        const usedInPlan = new Set(days.flatMap((d) => d.exercises.map((x) => x.exerciseId)));
+        const e = pickExercise(pattern, ctx.sel, 'accessory', usedInPlan, usedInDay);
+        if (!e) continue;
+        day.exercises.push(makePlanExercise(ctx, e, 'accessory'));
+        return true;
+      }
   return false;
 }
 
@@ -584,7 +593,7 @@ export function generatePlan(profile: Profile, settings: PlanSettings, scan: Sca
   const below = MUSCLES.filter((m) => finalVolume[m] < targets[m].floor);
   if (below.length)
     ctx.warnings.push(
-      `Your equipment limits direct work for ${below.map((m) => MUSCLE_LABELS[m].toLowerCase()).join(', ')}. Adding bands or dumbbells would fill the gap.`,
+      `Your equipment limits direct work for ${below.map((m) => MUSCLE_LABELS[m].toLowerCase()).join(', ')}. A loaded backpack, water jugs, a sturdy table, bands or dumbbells would fill the gap — add them in your profile.`,
     );
 
   const blockWeeks = level === 'beginner' ? 8 : 6;

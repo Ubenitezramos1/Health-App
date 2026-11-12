@@ -16,6 +16,7 @@ const PLAN_ROWS = new Set([
   'Time per session',
   'Access',
   'Items',
+  'Other equipment',
   'Heaviest dumbbell',
 ]);
 
