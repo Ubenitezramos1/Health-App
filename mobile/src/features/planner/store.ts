@@ -34,6 +34,8 @@ type PlanState = {
   save: (plan: Plan) => void;
   /** Make a past plan current again; the current one moves to history. */
   restore: (planId: string) => void;
+  /** Permanently delete a past plan. Workout logs are kept (they feed lift history and suggestions). */
+  removePast: (planId: string) => void;
 };
 
 export const usePlanStore = create<PlanState>((set, get) => {
@@ -76,6 +78,11 @@ export const usePlanStore = create<PlanState>((set, get) => {
       if (!target) return;
       const { archivedAt: _archivedAt, ...restored } = target;
       set({ plan: restored, history: [...history.filter((p) => p.id !== planId), ...archive(plan)] });
+      persist();
+    },
+
+    removePast: (planId) => {
+      set({ history: get().history.filter((p) => p.id !== planId) });
       persist();
     },
   };

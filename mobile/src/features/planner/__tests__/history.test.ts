@@ -1,5 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 
+import { useTrackerStore } from '@/features/tracker/store';
+
 import { baseProfile, withProfile } from '../__fixtures__';
 import { defaultSettings } from '../engine';
 import { changesSincePlan, planChanges } from '../profile-diff';
@@ -49,5 +51,18 @@ describe('past plans', () => {
     expect(plan?.id).toBe(first.id);
     expect(plan?.archivedAt).toBeUndefined();
     expect(history.map((p) => p.id)).toEqual([second.id]);
+  });
+
+  it('deletes a past plan without touching the current plan or workout logs', () => {
+    usePlanStore.setState({ plan: null, history: [] });
+    const first = usePlanStore.getState().build(baseProfile, defaultSettings(baseProfile), null);
+    const second = usePlanStore.getState().build(baseProfile, defaultSettings(baseProfile), null);
+    const log = { id: 'l1', planId: first.id } as never;
+    useTrackerStore.setState({ logs: [log] });
+
+    usePlanStore.getState().removePast(first.id);
+    expect(usePlanStore.getState().history).toEqual([]);
+    expect(usePlanStore.getState().plan?.id).toBe(second.id);
+    expect(useTrackerStore.getState().logs).toEqual([log]);
   });
 });

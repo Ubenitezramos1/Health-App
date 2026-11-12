@@ -12,13 +12,14 @@ import { usePlanStore } from '@/features/planner/store';
 import { fmtDate } from '@/features/tracker/format';
 import { useTrackerStore } from '@/features/tracker/store';
 
-/** Read-only view of a past plan, with a confirmed switch back to it. */
+/** Read-only view of a past plan, with confirmed switch-back and delete. */
 export default function PastPlan() {
   const { planId } = useLocalSearchParams<{ planId: string }>();
   const history = usePlanStore((s) => s.history);
   const restore = usePlanStore((s) => s.restore);
+  const removePast = usePlanStore((s) => s.removePast);
   const logs = useTrackerStore((s) => s.logs);
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<'switch' | 'delete' | null>(null);
 
   const past = history.find((p) => p.id === planId);
   if (!past) return <Redirect href="/plan" />;
@@ -30,7 +31,7 @@ export default function PastPlan() {
   return (
     <Screen
       footer={
-        confirming ? (
+        confirming === 'switch' ? (
           <View style={{ gap: Spacing.sm }}>
             <Callout tone="warning">
               <AppText variant="label">Switch to this plan?</AppText>
@@ -40,7 +41,7 @@ export default function PastPlan() {
               </AppText>
             </Callout>
             <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-              <Button label="Cancel" variant="secondary" onPress={() => setConfirming(false)} style={{ flex: 1 }} />
+              <Button label="Cancel" variant="secondary" onPress={() => setConfirming(null)} style={{ flex: 1 }} />
               <Button
                 label="Yes, switch"
                 onPress={() => {
@@ -51,10 +52,34 @@ export default function PastPlan() {
               />
             </View>
           </View>
+        ) : confirming === 'delete' ? (
+          <View style={{ gap: Spacing.sm }}>
+            <Callout tone="warning">
+              <AppText variant="label">Delete this plan?</AppText>
+              <AppText variant="small" tone="secondary">
+                This permanently removes the plan and can&apos;t be undone. Your logged workouts stay in your lift
+                history and keep shaping weight suggestions.
+              </AppText>
+            </Callout>
+            <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+              <Button label="Cancel" variant="secondary" onPress={() => setConfirming(null)} style={{ flex: 1 }} />
+              <Button
+                label="Yes, delete"
+                onPress={() => {
+                  removePast(past.id);
+                  goBack('/plan');
+                }}
+                style={{ flex: 2, backgroundColor: Colors.danger }}
+              />
+            </View>
+          </View>
         ) : (
-          <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-            <Button label="Back" variant="secondary" onPress={() => goBack('/plan')} style={{ flex: 1 }} />
-            <Button label="Switch to this plan" onPress={() => setConfirming(true)} style={{ flex: 2 }} />
+          <View style={{ gap: Spacing.sm }}>
+            <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+              <Button label="Back" variant="secondary" onPress={() => goBack('/plan')} style={{ flex: 1 }} />
+              <Button label="Switch to this plan" onPress={() => setConfirming('switch')} style={{ flex: 2 }} />
+            </View>
+            <Button label="Delete plan" variant="ghost" onPress={() => setConfirming('delete')} />
           </View>
         )
       }>
